@@ -6,7 +6,7 @@ from snake_env import SnakeEnv
 from agent import DQNAgent
 
 
-def train(num_episodes=500):
+def train(num_episodes=1000):
     env = SnakeEnv()
     agent = DQNAgent()
 
@@ -37,7 +37,7 @@ def train(num_episodes=500):
 
         score = info["score"]
         scores.append(score)
-        agent.decay_epsilon()
+        agent.decay_epsilon(total_episodes=num_episodes)
 
         avg_loss = total_loss / loss_count if loss_count > 0 else 0.0
         avg_score = sum(scores) / len(scores)
