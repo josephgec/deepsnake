@@ -6,7 +6,9 @@ class DQN(nn.Module):
     def __init__(self, input_size=24, output_size=3):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(input_size, 256),
+            nn.Linear(input_size, 512),
+            nn.ReLU(),
+            nn.Linear(512, 256),
             nn.ReLU(),
             nn.Linear(256, 128),
             nn.ReLU(),
