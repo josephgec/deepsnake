@@ -79,7 +79,7 @@ class DQNAgent:
 
     def decay_epsilon(self, total_episodes=500):
         self.epsilon_step += 1
-        decay_episodes = int(total_episodes * 0.8)
+        decay_episodes = int(total_episodes * 0.7)
         self.epsilon = max(self.epsilon_min, 1.0 - self.epsilon_step / decay_episodes)
 
     def update_target_network(self, tau=0.005):
