@@ -6,7 +6,7 @@ from snake_env import SnakeEnv
 from agent import DQNAgent
 
 
-def train(num_episodes=2000):
+def train(num_episodes=500):
     env = SnakeEnv()
     agent = DQNAgent()
 
