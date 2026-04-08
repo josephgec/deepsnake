@@ -1,0 +1,49 @@
+commit	avg_score	pct_over_30	episodes	status	description
+905a5fd	33.18	58.0	500	keep	baseline
+5f954a1	29.55	49.0	500	discard	lr 5e-4
+9c411fe	30.95	50.0	500	discard	dueling DQN
+84fd3db	39.10	85.5	500	keep	linear epsilon decay over 80%
+61b1473	40.99	88.5	500	keep	batch size 128
+80103e2	42.66	84.5	500	keep	wider deeper network 512-256-128
+6c6e199	33.55	68.0	500	discard	lr 3e-4
+f23b0ba	40.99	82.0	500	discard	bigger warmup 5000
+5ba7881	34.31	66.0	500	discard	train every 4 steps
+4e40423	37.62	81.0	500	discard	dueling DQN on 512-256-128
+2919e92	39.45	83.0	500	discard	tau=0.01
+843b994	39.19	73.5	500	discard	2x train steps per env step
+3043297	37.75	72.5	500	discard	replay buffer 200k
+14844ad	39.07	78.0	500	discard	reward clipping [-1,+1]
+7d6dbd8	41.85	85.5	500	discard	GELU activation
+d08fe40	38.62	78.5	500	discard	layer normalization
+dd4a741	41.91	83.0	1000	discard	1000 episodes (epsilon still 500 schedule)
+c0e7a97	38.67	83.5	500	discard	AdamW weight_decay=1e-4
+a30d8ee	38.53	73.5	500	discard	gamma=0.95
+a508718	26.29	36.0	500	discard	cosine annealing LR
+56f1974	1.79	0.0	500	discard	3-step returns (destabilized)
+d86fd63	39.49	79.0	500	discard	MSE loss
+de5e1c3	39.17	81.0	500	discard	256-256 symmetric
+c926313	37.94	75.0	500	discard	batch size 256
+762cc11	41.66	87.0	500	discard	grad clip 0.5
+76455d2	38.34	79.0	500	discard	eps_min 0.05
+7e5b1c3	38.92	83.0	500	discard	epsilon decay 90%
+77942ce	37.44	76.5	500	discard	PER
+2ea7780	38.34	81.5	500	discard	hard target update every 10 eps
+cfd394a	36.97	74.5	500	discard	lr=5e-4 with wider net
+3465c81	37.65	78.0	500	discard	reward scaling /10
+b01a1ba	40.05	82.0	500	discard	1024-256-128 network
+fc2687f	43.66	86.0	500	keep	epsilon decay 70%
+9d35161	41.74	85.5	500	discard	epsilon decay 60%
+4a3f013	39.66	81.5	500	discard	grad clip 5.0
+fdbb894	38.25	77.0	500	discard	dropout 0.1
+45ed283	40.70	85.0	500	discard	gamma=0.999
+c4fbaa3	39.79	76.0	500	discard	Kaiming init
+4bca0a7	41.63	85.0	500	discard	tau=0.002
+c90a1bc	44.36	88.0	1000	keep	1000 episodes + correct epsilon schedule
+4a32b4c	41.66	84.5	1000	discard	residual connections 256-256-256
+4e7c41c	29.45	44.5	1000	discard	target update per episode
+436a2f6	41.98	85.0	1000	discard	min_replay_size 2000
+64aa709	43.55	89.5	1000	discard	SiLU activation
+e63f204	42.83	86.0	1000	discard	lr=7e-4
+4673ca5	41.27	82.5	1000	discard	rolling avg window 50
+4d8bf29	38.60	77.0	1000	discard	epsilon decay 75%
+7e62829	39.01	82.5	2000	discard	2000 episodes (overfit)
