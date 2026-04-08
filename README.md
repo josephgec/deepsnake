@@ -1,6 +1,6 @@
 # DeepSnake - Snake DQN Reinforcement Learning
 
-A Snake game trained with a Deep Q-Network (DQN) agent using PyTorch. The agent learns from scratch to consistently score 30+ after training.
+A Snake game agent trained with Deep Q-Learning (DQN) using PyTorch. The agent learns from scratch to play Snake, averaging 44+ points over 200 evaluation games. Hyperparameters and architecture were tuned via automated experiment sweeps (autoresearch).
 
 ## Results
 
@@ -24,13 +24,15 @@ A Snake game trained with a Deep Q-Network (DQN) agent using PyTorch. The agent 
 
 ```
 snake_dqn/
-├── snake_env.py      # Headless Snake game environment
-├── model.py          # DQN neural network
+├── snake_env.py      # Headless Snake game environment (READ-ONLY)
+├── model.py          # DQN neural network (512-256-128)
 ├── agent.py          # Double DQN agent with replay buffer
-├── train.py          # Training loop
+├── train.py          # Training loop (1000 episodes)
+├── evaluate.py       # Headless evaluation over 200 games
 ├── play.py           # Pygame visualization of trained agent
 ├── plot_training.py  # Plot training curves
 └── checkpoints/      # Saved model weights
+results.tsv           # Full autoresearch experiment log (47 experiments)
 ```
 
 ## Quick Start
@@ -106,15 +108,28 @@ Input(24) → Linear(512) → ReLU → Linear(256) → ReLU → Linear(128) → 
 
 ### Autoresearch Results
 
-47 experiments were run automatically, testing architecture changes, hyperparameters, training schedules, and algorithm variants. 5 improvements were kept:
+47 experiments were run automatically using the [Karpathy autoresearch](https://github.com/karpathy/autoresearch) pattern: modify code, train, evaluate over 200 greedy games, keep improvements, discard failures, repeat. Each experiment was committed, evaluated, and either kept or reverted.
 
-| Experiment | avg_score | Status |
-|---|---|---|
-| Baseline (original code) | 33.18 | keep |
-| Linear epsilon decay (80%) | 39.10 | keep |
-| Batch size 128 | 40.99 | keep |
-| Wider network (512-256-128) | 42.66 | keep |
-| Epsilon decay 70% | 43.66 | keep |
-| 1000 episodes + correct schedule | 44.36 | keep |
+**Improvements kept (cumulative):**
 
-See `results.tsv` for the full experiment log.
+| # | Experiment | avg_score | Delta |
+|---|---|---|---|
+| 0 | Baseline (original code) | 33.18 | -- |
+| 1 | Linear epsilon decay (80%) | 39.10 | +5.92 |
+| 2 | Batch size 64 → 128 | 40.99 | +1.89 |
+| 3 | Wider network (512-256-128) | 42.66 | +1.67 |
+| 4 | Epsilon decay tuned to 70% | 43.66 | +1.00 |
+| 5 | 1000 episodes + correct schedule | 44.36 | +0.70 |
+
+**Total improvement: +11.18 avg_score (+34%)**
+
+Notable failed experiments include: dueling DQN, prioritized experience replay, n-step returns, reward clipping/scaling, cosine LR annealing, LayerNorm, dropout, GELU/SiLU activations, and various learning rate reductions. See `results.tsv` for the full log of all 47 experiments.
+
+### Evaluate a trained model
+
+```bash
+cd snake_dqn
+python evaluate.py
+```
+
+Runs 200 headless games and prints avg_score, median, best, and percentage scoring 30+.
