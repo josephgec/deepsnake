@@ -45,7 +45,7 @@ class DQNAgent:
     def store_transition(self, state, action, reward, next_state, done):
         self.memory.append((state, action, reward, next_state, done))
 
-    def train_step(self, batch_size=64) -> float:
+    def train_step(self, batch_size=128) -> float:
         if len(self.memory) < self.min_replay_size:
             return 0.0
 
