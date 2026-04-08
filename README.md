@@ -4,9 +4,11 @@ A Snake game trained with a Deep Q-Network (DQN) agent using PyTorch. The agent 
 
 ## Results
 
-- **Average score (200 games):** 43.9
+- **Average score (200 games):** 44.36
 - **Best single game:** 75
-- **Games scoring 30+:** 82%
+- **Games scoring 30+:** 88%
+
+*Improved from baseline avg 33.18 through 47 automated experiments (autoresearch).*
 
 ![Training Plot](snake_dqn/training_plot.png)
 
@@ -58,7 +60,7 @@ cd snake_dqn
 python train.py
 ```
 
-Training runs for 2000 episodes and saves checkpoints to `checkpoints/`.
+Training runs for 1000 episodes and saves checkpoints to `checkpoints/`.
 
 ### Generate training plots
 
@@ -93,10 +95,26 @@ python plot_training.py
 | Huber loss (SmoothL1) | Stabilizes training vs MSE |
 | Soft target updates (tau=0.005) | Smoother learning than hard copies |
 | Gradient clipping (max_norm=1.0) | Prevents gradient explosion |
-| Epsilon-greedy (1.0 → 0.01) | Balances exploration/exploitation |
+| Linear epsilon decay (over 70% of episodes) | Better exploration schedule than multiplicative decay |
+| Larger batch size (128) | More stable gradient estimates |
 
 ### Network Architecture
 
 ```
-Input(24) → Linear(256) → ReLU → Linear(128) → ReLU → Linear(3)
+Input(24) → Linear(512) → ReLU → Linear(256) → ReLU → Linear(128) → ReLU → Linear(3)
 ```
+
+### Autoresearch Results
+
+47 experiments were run automatically, testing architecture changes, hyperparameters, training schedules, and algorithm variants. 5 improvements were kept:
+
+| Experiment | avg_score | Status |
+|---|---|---|
+| Baseline (original code) | 33.18 | keep |
+| Linear epsilon decay (80%) | 39.10 | keep |
+| Batch size 128 | 40.99 | keep |
+| Wider network (512-256-128) | 42.66 | keep |
+| Epsilon decay 70% | 43.66 | keep |
+| 1000 episodes + correct schedule | 44.36 | keep |
+
+See `results.tsv` for the full experiment log.
