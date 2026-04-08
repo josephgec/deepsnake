@@ -32,6 +32,7 @@ class DQNAgent:
         self.epsilon = 1.0
         self.epsilon_min = 0.01
         self.epsilon_decay = 0.995
+        self.epsilon_step = 0  # for linear decay
 
     def get_action(self, state: np.ndarray) -> int:
         if random.random() < self.epsilon:
@@ -76,8 +77,10 @@ class DQNAgent:
 
         return loss.item()
 
-    def decay_epsilon(self):
-        self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
+    def decay_epsilon(self, total_episodes=500):
+        self.epsilon_step += 1
+        decay_episodes = int(total_episodes * 0.8)
+        self.epsilon = max(self.epsilon_min, 1.0 - self.epsilon_step / decay_episodes)
 
     def update_target_network(self, tau=0.005):
         for target_param, policy_param in zip(
