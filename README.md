@@ -4,11 +4,11 @@ A Snake game agent trained with Deep Q-Learning (DQN) using PyTorch. The agent l
 
 ## Results
 
-- **Average score (200 games):** 44.36
+- **Average score (200 games):** 44.49
 - **Best single game:** 75
-- **Games scoring 30+:** 88%
+- **Games scoring 30+:** 89.5%
 
-*Improved from baseline avg 33.18 through 47 automated experiments (autoresearch).*
+*Improved from baseline avg 33.18 through autoresearch + a hybrid scalar-MLP / local-CNN architecture.*
 
 ![Training Plot](snake_dqn/training_plot.png)
 
@@ -79,8 +79,9 @@ python plot_training.py
 - Actions are relative: straight, turn right, turn left
 - Reward: +10 eat food, -10 die, +1/-1 move closer/farther from food
 
-### State Representation (24 features)
+### State Representation (24 scalar features + 7×7 local grid)
 
+**Scalar features (24 values):**
 - Immediate danger in 3 directions (straight, right, left)
 - Current direction (one-hot, 4 values)
 - Food direction (4 binary values)
@@ -88,6 +89,14 @@ python plot_training.py
 - Normalized food offset (dx, dy)
 - Snake length (normalized)
 - Distance to nearest obstacle in 8 directions (raycasting)
+
+**Local grid (3 × 7 × 7 = 147 values):**
+- Centered on the snake's head, radius 3
+- Channel 0: nearby body segments
+- Channel 1: food (if within window)
+- Channel 2: walls (out-of-bounds cells)
+
+The grid lets the CNN see the local body topology that scalar features can't encode (e.g., box-loop traps, narrow corridors).
 
 ### DQN Improvements
 
@@ -100,11 +109,39 @@ python plot_training.py
 | Linear epsilon decay (over 70% of episodes) | Better exploration schedule than multiplicative decay |
 | Larger batch size (128) | More stable gradient estimates |
 
-### Network Architecture
+### Network Architecture (Hybrid)
+
+The model has two parallel input paths that merge before the output layer:
 
 ```
-Input(24) → Linear(512) → ReLU → Linear(256) → ReLU → Linear(128) → ReLU → Linear(3)
+                  ┌─────────────────────┐
+                  │   24 scalar features │
+                  └──────────┬──────────┘
+                             │
+                      Linear(24 → 128) → ReLU
+                             │
+                      128-dim ─────────────────┐
+                                                │
+  ┌─────────────────────┐                      │
+  │  3 × 7 × 7 grid     │                      │
+  │  (local view)       │                      │
+  └──────────┬──────────┘                      │
+             │                                  │
+     Conv2d(3→16, 3×3) → ReLU                 │
+     Conv2d(16→16, 3×3) → ReLU                │
+     Flatten (144)                             │
+             │                                  │
+      144-dim ─────────────────────────────────┤
+                                                │
+                                    Concat (272)
+                                        │
+                                Linear(272 → 128) → ReLU
+                                Linear(128 → 3)
+                                        │
+                                Q-values (3 actions)
 ```
+
+**41K parameters total.** The scalar path bootstraps food-finding (proven from baseline); the CNN path adds local body-topology awareness for trap avoidance.
 
 ### Autoresearch Results
 

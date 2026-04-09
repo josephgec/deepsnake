@@ -10,14 +10,14 @@ from model import DQN
 
 
 class DQNAgent:
-    def __init__(self, state_size=24, action_size=3, lr=0.001):
+    def __init__(self, state_size=171, action_size=3, lr=0.001):
         self.state_size = state_size
         self.action_size = action_size
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         # Networks
-        self.policy_net = DQN(state_size, action_size).to(self.device)
-        self.target_net = DQN(state_size, action_size).to(self.device)
+        self.policy_net = DQN(output_size=action_size).to(self.device)
+        self.target_net = DQN(output_size=action_size).to(self.device)
         self.update_target_network()
 
         self.optimizer = optim.Adam(self.policy_net.parameters(), lr=lr)
@@ -77,7 +77,7 @@ class DQNAgent:
 
         return loss.item()
 
-    def decay_epsilon(self, total_episodes=500):
+    def decay_epsilon(self, total_episodes=1000):
         self.epsilon_step += 1
         decay_episodes = int(total_episodes * 0.7)
         self.epsilon = max(self.epsilon_min, 1.0 - self.epsilon_step / decay_episodes)
@@ -104,7 +104,7 @@ class DQNAgent:
 if __name__ == "__main__":
     agent = DQNAgent()
     # Test storing and training
-    dummy_state = np.random.randn(24).astype(np.float32)
+    dummy_state = np.random.randn(171).astype(np.float32)
     for _ in range(1100):
         action = agent.get_action(dummy_state)
         agent.store_transition(dummy_state, action, 1.0, dummy_state, False)

@@ -17,6 +17,7 @@ def train(num_episodes=1000):
     best_avg = 0.0
     log_rows = []
 
+    step_count = 0
     for episode in range(num_episodes):
         state = env.reset()
         done = False
@@ -27,11 +28,13 @@ def train(num_episodes=1000):
             action = agent.get_action(state)
             next_state, reward, done, info = env.step(action)
             agent.store_transition(state, action, reward, next_state, done)
-            loss = agent.train_step()
-            if loss > 0:
-                total_loss += loss
-                loss_count += 1
-            # Soft target update every step
+            step_count += 1
+            if step_count % 4 == 0:
+                loss = agent.train_step(batch_size=64)
+                if loss > 0:
+                    total_loss += loss
+                    loss_count += 1
+            # Soft target update every step (cheap)
             agent.update_target_network()
             state = next_state
 
@@ -57,12 +60,12 @@ def train(num_episodes=1000):
             best_avg = avg_score
             agent.save("checkpoints/best_avg_model.pth")
 
-        if episode % 10 == 0:
-            print(f"Ep {episode:4d} | Score: {score:3d} | "
+        if episode % 50 == 0:
+            print(f"Ep {episode:5d} | Score: {score:3d} | "
                   f"Avg(100): {avg_score:6.2f} | "
                   f"Best: {best_score:3d} | "
                   f"Eps: {agent.epsilon:.3f} | "
-                  f"Loss: {avg_loss:.4f}")
+                  f"Loss: {avg_loss:.4f}", flush=True)
 
     # Save final model and log
     agent.save("checkpoints/final_model.pth")

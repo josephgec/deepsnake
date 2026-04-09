@@ -66,6 +66,36 @@ class SnakeEnv:
                 return True
         return False
 
+    def _get_local_grid(self, head_x, head_y, radius=3):
+        """Return a 3-channel (2*radius+1)x(2*radius+1) grid centered on the head.
+
+        Channel 0: body segments (excluding head)
+        Channel 1: food
+        Channel 2: walls (out-of-bounds cells)
+        """
+        size = 2 * radius + 1
+        grid = np.zeros((3, size, size), dtype=np.float32)
+        snake_set = set(self.snake)
+
+        for ddy in range(-radius, radius + 1):
+            for ddx in range(-radius, radius + 1):
+                gx = head_x + ddx
+                gy = head_y + ddy
+                lx = ddx + radius
+                ly = ddy + radius
+
+                if gx < 0 or gx >= self.grid_size or gy < 0 or gy >= self.grid_size:
+                    grid[2][ly][lx] = 1.0
+                    continue
+
+                if (gx, gy) in snake_set and (gx, gy) != (head_x, head_y):
+                    grid[0][ly][lx] = 1.0
+
+                if (gx, gy) == self.food:
+                    grid[1][ly][lx] = 1.0
+
+        return grid
+
     def _ray_distance(self, start_x, start_y, dx, dy) -> float:
         """Cast a ray and return normalized distance to nearest obstacle."""
         dist = 0
@@ -170,7 +200,7 @@ class SnakeEnv:
         rays = [self._ray_distance(head_x, head_y, rdx, rdy)
                 for rdx, rdy in ray_dirs]
 
-        state = np.array([
+        scalar_state = np.array([
             danger_straight,
             danger_right,
             danger_left,
@@ -190,7 +220,9 @@ class SnakeEnv:
             *rays,
         ], dtype=np.float32)
 
-        return state
+        # Append flattened 7x7 local grid (3 channels = 147 values)
+        local_grid = self._get_local_grid(head_x, head_y).flatten()
+        return np.concatenate([scalar_state, local_grid])
 
 
 if __name__ == "__main__":
