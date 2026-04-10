@@ -4,11 +4,11 @@ A Snake game agent trained with Deep Q-Learning (DQN) using PyTorch. The agent l
 
 ## Results
 
-- **Average score (200 games):** 44.49
-- **Best single game:** 75
-- **Games scoring 30+:** 89.5%
+- **Average score (200 games):** ~53 (varies 50–56 across seeds)
+- **Best single game:** 87
+- **Games scoring 30+:** ~95%
 
-*Improved from baseline avg 33.18 through autoresearch + a hybrid scalar-MLP / local-CNN architecture.*
+*Improved from baseline avg 33.18 through autoresearch + a hybrid scalar-MLP / local-CNN architecture with 9×9 local view.*
 
 ![Training Plot](snake_dqn/training_plot.png)
 
@@ -62,7 +62,7 @@ cd snake_dqn
 python train.py
 ```
 
-Training runs for 1000 episodes and saves checkpoints to `checkpoints/`.
+Training runs for 5000 episodes and saves checkpoints to `checkpoints/`.
 
 ### Generate training plots
 
@@ -90,8 +90,8 @@ python plot_training.py
 - Snake length (normalized)
 - Distance to nearest obstacle in 8 directions (raycasting)
 
-**Local grid (3 × 7 × 7 = 147 values):**
-- Centered on the snake's head, radius 3
+**Local grid (3 × 9 × 9 = 243 values):**
+- Centered on the snake's head, radius 4
 - Channel 0: nearby body segments
 - Channel 1: food (if within window)
 - Channel 2: walls (out-of-bounds cells)

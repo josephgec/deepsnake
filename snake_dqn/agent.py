@@ -10,8 +10,7 @@ from model import DQN
 
 
 class DQNAgent:
-    def __init__(self, state_size=171, action_size=3, lr=0.001):
-        self.state_size = state_size
+    def __init__(self, action_size=3, lr=0.001):
         self.action_size = action_size
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -104,7 +103,7 @@ class DQNAgent:
 if __name__ == "__main__":
     agent = DQNAgent()
     # Test storing and training
-    dummy_state = np.random.randn(171).astype(np.float32)
+    dummy_state = np.random.randn(24 + 3 * 9 * 9).astype(np.float32)
     for _ in range(1100):
         action = agent.get_action(dummy_state)
         agent.store_transition(dummy_state, action, 1.0, dummy_state, False)

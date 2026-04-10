@@ -66,7 +66,7 @@ class SnakeEnv:
                 return True
         return False
 
-    def _get_local_grid(self, head_x, head_y, radius=3):
+    def _get_local_grid(self, head_x, head_y, radius=4):
         """Return a 3-channel (2*radius+1)x(2*radius+1) grid centered on the head.
 
         Channel 0: body segments (excluding head)

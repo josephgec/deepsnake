@@ -3,7 +3,7 @@ import torch.nn as nn
 
 SCALAR_SIZE = 24
 GRID_CHANNELS = 3
-GRID_SIZE = 7
+GRID_SIZE = 9
 
 
 class DQN(nn.Module):
@@ -21,12 +21,13 @@ class DQN(nn.Module):
 
         # Path B: local grid CNN
         self.conv_net = nn.Sequential(
-            nn.Conv2d(GRID_CHANNELS, 16, kernel_size=3),  # 7x7 -> 5x5
+            nn.Conv2d(GRID_CHANNELS, 16, kernel_size=3),  # 9x9 -> 7x7
             nn.ReLU(),
-            nn.Conv2d(16, 16, kernel_size=3),             # 5x5 -> 3x3
+            nn.Conv2d(16, 16, kernel_size=3),             # 7x7 -> 5x5
             nn.ReLU(),
         )
-        conv_out_size = 16 * 3 * 3  # 144
+        conv_spatial = GRID_SIZE - 4  # two 3x3 convs shrink by 2 each
+        conv_out_size = 16 * conv_spatial * conv_spatial
 
         # Merge and output
         self.head = nn.Sequential(
