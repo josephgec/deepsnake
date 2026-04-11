@@ -109,8 +109,8 @@ def draw_death_face(screen, hx, hy, dx, dy):
     pygame.draw.circle(screen, (50, 50, 0), (mouth_x, mouth_y), 3)
 
 
-def draw_alive_head(screen, hx, hy, direction):
-    """Draw the normal alive snake head with eyes and tongue."""
+def draw_alive_head(screen, hx, hy, direction, show_tongue=False, eating=False):
+    """Draw the snake head. Tongue only when near food, open mouth when eating."""
     cx = hx * CELL_SIZE + CELL_SIZE // 2
     cy = hy * CELL_SIZE + CELL_SIZE // 2
     dx, dy = DIR_VECTORS[direction]
@@ -127,29 +127,47 @@ def draw_alive_head(screen, hx, hy, direction):
     eye_r = 4
     pupil_r = 2
 
-    for side in (-1, 1):
-        ex = cx + dx * eye_fwd + perp_x * eye_offset * side
-        ey = cy + dy * eye_fwd + perp_y * eye_offset * side
-        pygame.draw.circle(screen, EYE_WHITE, (int(ex), int(ey)), eye_r)
-        pygame.draw.circle(screen, EYE_BLACK, (int(ex + dx * 1), int(ey + dy * 1)), pupil_r)
+    if eating:
+        # Happy squint eyes when eating
+        for side in (-1, 1):
+            ex = int(cx + dx * eye_fwd + perp_x * eye_offset * side)
+            ey = int(cy + dy * eye_fwd + perp_y * eye_offset * side)
+            # Upward arc (happy eyes)
+            pygame.draw.arc(screen, EYE_BLACK,
+                            (ex - 4, ey - 3, 8, 6),
+                            0.3, math.pi - 0.3, 2)
+        # Open mouth eating the apple
+        mouth_x = int(cx + dx * 8)
+        mouth_y = int(cy + dy * 8)
+        pygame.draw.circle(screen, (40, 100, 40), (mouth_x, mouth_y), 5)
+        # Small red crumb to suggest apple being eaten
+        pygame.draw.circle(screen, APPLE_RED, (mouth_x + int(dx * 2), mouth_y + int(dy * 2)), 2)
+    else:
+        # Normal eyes
+        for side in (-1, 1):
+            ex = cx + dx * eye_fwd + perp_x * eye_offset * side
+            ey = cy + dy * eye_fwd + perp_y * eye_offset * side
+            pygame.draw.circle(screen, EYE_WHITE, (int(ex), int(ey)), eye_r)
+            pygame.draw.circle(screen, EYE_BLACK, (int(ex + dx * 1), int(ey + dy * 1)), pupil_r)
 
-    # Tongue
-    tongue_base_x = cx + dx * (CELL_SIZE // 2)
-    tongue_base_y = cy + dy * (CELL_SIZE // 2)
-    tongue_tip_x = tongue_base_x + dx * 8
-    tongue_tip_y = tongue_base_y + dy * 8
-    pygame.draw.line(screen, TONGUE,
-                     (int(tongue_base_x), int(tongue_base_y)),
-                     (int(tongue_tip_x), int(tongue_tip_y)), 2)
-    fork = 3
-    pygame.draw.line(screen, TONGUE,
-                     (int(tongue_tip_x), int(tongue_tip_y)),
-                     (int(tongue_tip_x + dx * 3 + perp_x * fork),
-                      int(tongue_tip_y + dy * 3 + perp_y * fork)), 2)
-    pygame.draw.line(screen, TONGUE,
-                     (int(tongue_tip_x), int(tongue_tip_y)),
-                     (int(tongue_tip_x + dx * 3 - perp_x * fork),
-                      int(tongue_tip_y + dy * 3 - perp_y * fork)), 2)
+    # Tongue — only when near food (and not eating)
+    if show_tongue and not eating:
+        tongue_base_x = cx + dx * (CELL_SIZE // 2)
+        tongue_base_y = cy + dy * (CELL_SIZE // 2)
+        tongue_tip_x = tongue_base_x + dx * 8
+        tongue_tip_y = tongue_base_y + dy * 8
+        pygame.draw.line(screen, TONGUE,
+                         (int(tongue_base_x), int(tongue_base_y)),
+                         (int(tongue_tip_x), int(tongue_tip_y)), 2)
+        fork = 3
+        pygame.draw.line(screen, TONGUE,
+                         (int(tongue_tip_x), int(tongue_tip_y)),
+                         (int(tongue_tip_x + dx * 3 + perp_x * fork),
+                          int(tongue_tip_y + dy * 3 + perp_y * fork)), 2)
+        pygame.draw.line(screen, TONGUE,
+                         (int(tongue_tip_x), int(tongue_tip_y)),
+                         (int(tongue_tip_x + dx * 3 - perp_x * fork),
+                          int(tongue_tip_y + dy * 3 - perp_y * fork)), 2)
 
 
 def main():
@@ -172,6 +190,8 @@ def main():
     done = False
     death_timer = 0
     death_direction = (1, 0)
+    prev_score = 0
+    eat_timer = 0
 
     while True:
         for event in pygame.event.get():
@@ -292,9 +312,23 @@ def main():
         score = info["score"]
         high_score = max(high_score, score)
 
+        # Detect eating
+        if score > prev_score:
+            eat_timer = 3  # show eating face for 3 frames
+        prev_score = score
+        eating = eat_timer > 0
+        if eat_timer > 0:
+            eat_timer -= 1
+
         if done:
             death_direction = DIR_VECTORS[prev_direction]
             death_timer = 0
+
+        # Check if tongue should show (food within 3 Manhattan distance)
+        hx, hy = env.snake[0]
+        fx, fy = env.food
+        food_dist = abs(hx - fx) + abs(hy - fy)
+        show_tongue = food_dist <= 3
 
         # Draw
         screen.fill(BLACK)
@@ -304,9 +338,9 @@ def main():
             pygame.draw.line(screen, GRAY, (i * CELL_SIZE, 0), (i * CELL_SIZE, WINDOW_SIZE))
             pygame.draw.line(screen, GRAY, (0, i * CELL_SIZE), (WINDOW_SIZE, i * CELL_SIZE))
 
-        # Food
-        fx, fy = env.food
-        draw_apple(screen, fx, fy)
+        # Food (don't draw during eating animation — it looks like it was eaten)
+        if not eating:
+            draw_apple(screen, fx, fy)
 
         # Snake body
         for i, (sx, sy) in enumerate(env.snake):
@@ -320,8 +354,8 @@ def main():
             pygame.draw.rect(screen, LIGHT_GREEN, inner, border_radius=4)
 
         # Snake head
-        hx, hy = env.snake[0]
-        draw_alive_head(screen, hx, hy, env.direction)
+        draw_alive_head(screen, hx, hy, env.direction,
+                        show_tongue=show_tongue, eating=eating)
 
         # Score
         score_text = font.render(f"Score: {score}  Best: {high_score}", True, WHITE)
