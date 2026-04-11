@@ -41,16 +41,17 @@ DIR_TO_ANGLE = {
 
 
 def load_face_sprites(path, size):
-    """Load the face photo, crop to circle, create rotated versions per direction."""
+    """Load the face photo, crop tight to face, circle-mask, create rotated versions."""
     raw = pygame.image.load(path)
 
-    # Crop to square from center
+    # Zoom in on the face — crop to center 55% of image height, centered
     w, h = raw.get_size()
-    side = min(w, h)
-    crop_x = (w - side) // 2
-    crop_y = (h - side) // 2
-    square = pygame.Surface((side, side), pygame.SRCALPHA)
-    square.blit(raw, (0, 0), (crop_x, crop_y, side, side))
+    face_h = int(h * 0.55)
+    face_w = face_h  # square
+    crop_x = (w - face_w) // 2
+    crop_y = int(h * 0.15)  # face starts ~15% from top
+    square = pygame.Surface((face_w, face_h), pygame.SRCALPHA)
+    square.blit(raw, (0, 0), (crop_x, crop_y, face_w, face_h))
 
     # Scale to cell size
     scaled = pygame.transform.smoothscale(square, (size, size))
@@ -110,18 +111,77 @@ def draw_apple(screen, fx, fy):
     pygame.draw.polygon(screen, APPLE_LEAF, leaf_pts)
 
 
-def draw_body_segment(screen, sx, sy, is_tail=False):
-    """Draw a body segment as a rounded blue blob."""
+SKIN_COLOR = (210, 170, 130)
+SKIN_LIGHT = (230, 195, 160)
+SKIN_DARK = (180, 140, 100)
+SHOE_COLOR = (200, 60, 60)
+SHOE_DARK = (150, 40, 40)
+LEG_COLOR = (180, 145, 110)
+
+
+def draw_body_segment(screen, sx, sy, is_tail=False, frame=0, seg_index=0,
+                      direction=None):
+    """Draw a body segment with animated running legs."""
     cx = sx * CELL_SIZE + CELL_SIZE // 2
     cy = sy * CELL_SIZE + CELL_SIZE // 2
     r = CELL_SIZE // 2 - 2 if not is_tail else CELL_SIZE // 2 - 4
 
-    # Outer circle
-    pygame.draw.circle(screen, BODY_COLOR, (cx, cy), r)
-    # Inner highlight
-    pygame.draw.circle(screen, BODY_LIGHT, (cx - 2, cy - 2), r - 4)
-    # Dark outline
-    pygame.draw.circle(screen, BODY_DARK, (cx, cy), r, 2)
+    # Body (skin-toned circle)
+    pygame.draw.circle(screen, SKIN_COLOR, (cx, cy), r)
+    pygame.draw.circle(screen, SKIN_LIGHT, (cx - 2, cy - 2), r - 4)
+    pygame.draw.circle(screen, SKIN_DARK, (cx, cy), r, 2)
+
+    # Animated legs — alternate per frame + segment index for running wave
+    if direction is not None:
+        dx, dy = DIR_VECTORS[direction]
+        perp_x, perp_y = -dy, dx  # perpendicular to travel direction
+
+        # Two legs, alternating position based on frame + segment
+        phase = (frame + seg_index) % 2
+        leg_len = 7
+        foot_r = 3
+
+        for side in (-1, 1):
+            # Leg extends perpendicular to direction
+            base_x = cx + perp_x * (r - 2) * side
+            base_y = cy + perp_y * (r - 2) * side
+
+            # Alternate leg forward/back along travel direction
+            offset = leg_len if (phase == 0) == (side == 1) else -leg_len
+            tip_x = base_x + perp_x * 4 * side + dx * offset
+            tip_y = base_y + perp_y * 4 * side + dy * offset
+
+            # Leg line
+            pygame.draw.line(screen, LEG_COLOR,
+                             (int(base_x), int(base_y)),
+                             (int(tip_x), int(tip_y)), 2)
+            # Shoe
+            pygame.draw.circle(screen, SHOE_COLOR, (int(tip_x), int(tip_y)), foot_r)
+            pygame.draw.circle(screen, SHOE_DARK, (int(tip_x), int(tip_y)), foot_r, 1)
+
+
+def draw_motion_lines(screen, tx, ty, direction, frame):
+    """Draw speed lines behind the tail."""
+    dx, dy = DIR_VECTORS[direction]
+    cx = tx * CELL_SIZE + CELL_SIZE // 2
+    cy = ty * CELL_SIZE + CELL_SIZE // 2
+
+    # Lines trail behind (opposite of direction)
+    for i in range(3):
+        offset = 8 + i * 6 + (frame % 2) * 3
+        length = 6 - i * 2
+        lx = cx - dx * offset
+        ly = cy - dy * offset
+        # Perpendicular spread
+        perp_x, perp_y = -dy, dx
+        spread = (i - 1) * 5
+        sx_pos = int(lx + perp_x * spread)
+        sy_pos = int(ly + perp_y * spread)
+        ex = int(sx_pos - dx * length)
+        ey = int(sy_pos - dy * length)
+        alpha = 180 - i * 50
+        pygame.draw.line(screen, (alpha, alpha, alpha),
+                         (sx_pos, sy_pos), (ex, ey), 1)
 
 
 def main():
@@ -151,6 +211,7 @@ def main():
     last_direction = Direction.RIGHT
     prev_score = 0
     eat_timer = 0
+    frame_count = 0
 
     while True:
         for event in pygame.event.get():
@@ -193,12 +254,13 @@ def main():
             # Food
             draw_apple(screen, env.food[0], env.food[1])
 
-            # Body (faded)
+            # Body (with legs, frozen pose)
             snake_list = list(env.snake)
             for i, (sx, sy) in enumerate(snake_list):
                 if i == 0:
                     continue
-                draw_body_segment(screen, sx, sy, is_tail=(i == len(snake_list) - 1))
+                draw_body_segment(screen, sx, sy, is_tail=(i == len(snake_list) - 1),
+                                  frame=0, seg_index=i, direction=last_direction)
 
             # Dead head — bounced back with death sprite
             hx, hy = env.snake[0]
@@ -266,17 +328,25 @@ def main():
         if not eating:
             draw_apple(screen, env.food[0], env.food[1])
 
-        # Body segments
+        # Body segments with running legs
         snake_list = list(env.snake)
         for i, (sx, sy) in enumerate(snake_list):
             if i == 0:
                 continue
-            draw_body_segment(screen, sx, sy, is_tail=(i == len(snake_list) - 1))
+            draw_body_segment(screen, sx, sy, is_tail=(i == len(snake_list) - 1),
+                              frame=frame_count, seg_index=i, direction=env.direction)
+
+        # Motion lines behind the tail
+        if len(snake_list) > 1:
+            tail_x, tail_y = snake_list[-1]
+            draw_motion_lines(screen, tail_x, tail_y, env.direction, frame_count)
 
         # Head — the face photo
         hx, hy = env.snake[0]
         head_sprite = face_sprites[env.direction]
         screen.blit(head_sprite, (hx * CELL_SIZE, hy * CELL_SIZE))
+
+        frame_count += 1
 
         # Eating effect — small apple crumbs near mouth
         if eating:
