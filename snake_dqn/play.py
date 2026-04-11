@@ -121,41 +121,40 @@ LEG_COLOR = (180, 145, 110)
 
 def draw_body_segment(screen, sx, sy, is_tail=False, frame=0, seg_index=0,
                       direction=None):
-    """Draw a body segment with animated running legs."""
+    """Draw a body segment. Only the last segment (tail) gets legs."""
     cx = sx * CELL_SIZE + CELL_SIZE // 2
     cy = sy * CELL_SIZE + CELL_SIZE // 2
-    r = CELL_SIZE // 2 - 2 if not is_tail else CELL_SIZE // 2 - 4
 
-    # Body (skin-toned circle)
-    pygame.draw.circle(screen, SKIN_COLOR, (cx, cy), r)
-    pygame.draw.circle(screen, SKIN_LIGHT, (cx - 2, cy - 2), r - 4)
-    pygame.draw.circle(screen, SKIN_DARK, (cx, cy), r, 2)
+    # Long smooth body — rounded rectangle filling the cell
+    body_rect = pygame.Rect(sx * CELL_SIZE + 2, sy * CELL_SIZE + 2,
+                            CELL_SIZE - 4, CELL_SIZE - 4)
+    pygame.draw.rect(screen, SKIN_COLOR, body_rect, border_radius=8)
+    inner = pygame.Rect(sx * CELL_SIZE + 4, sy * CELL_SIZE + 4,
+                        CELL_SIZE - 8, CELL_SIZE - 8)
+    pygame.draw.rect(screen, SKIN_LIGHT, inner, border_radius=6)
+    pygame.draw.rect(screen, SKIN_DARK, body_rect, 1, border_radius=8)
 
-    # Animated legs — alternate per frame + segment index for running wave
-    if direction is not None:
+    # Only draw legs on the tail segment
+    if is_tail and direction is not None:
         dx, dy = DIR_VECTORS[direction]
-        perp_x, perp_y = -dy, dx  # perpendicular to travel direction
+        perp_x, perp_y = -dy, dx
 
-        # Two legs, alternating position based on frame + segment
-        phase = (frame + seg_index) % 2
-        leg_len = 7
+        phase = frame % 2
+        leg_len = 9
         foot_r = 3
 
         for side in (-1, 1):
-            # Leg extends perpendicular to direction
-            base_x = cx + perp_x * (r - 2) * side
-            base_y = cy + perp_y * (r - 2) * side
+            base_x = cx + perp_x * (CELL_SIZE // 2 - 3) * side
+            base_y = cy + perp_y * (CELL_SIZE // 2 - 3) * side
 
-            # Alternate leg forward/back along travel direction
+            # Alternate legs forward/back
             offset = leg_len if (phase == 0) == (side == 1) else -leg_len
-            tip_x = base_x + perp_x * 4 * side + dx * offset
-            tip_y = base_y + perp_y * 4 * side + dy * offset
+            tip_x = base_x + perp_x * 5 * side + dx * offset
+            tip_y = base_y + perp_y * 5 * side + dy * offset
 
-            # Leg line
             pygame.draw.line(screen, LEG_COLOR,
                              (int(base_x), int(base_y)),
-                             (int(tip_x), int(tip_y)), 2)
-            # Shoe
+                             (int(tip_x), int(tip_y)), 3)
             pygame.draw.circle(screen, SHOE_COLOR, (int(tip_x), int(tip_y)), foot_r)
             pygame.draw.circle(screen, SHOE_DARK, (int(tip_x), int(tip_y)), foot_r, 1)
 
