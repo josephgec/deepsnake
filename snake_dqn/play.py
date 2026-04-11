@@ -117,15 +117,16 @@ SKIN_DARK = (180, 140, 100)
 SHOE_COLOR = (200, 60, 60)
 SHOE_DARK = (150, 40, 40)
 LEG_COLOR = (180, 145, 110)
+HAND_COLOR = (220, 180, 140)
 
 
-def draw_body_segment(screen, sx, sy, is_tail=False, frame=0, seg_index=0,
-                      direction=None):
-    """Draw a body segment. Only the last segment (tail) gets legs."""
+def draw_body_segment(screen, sx, sy, is_tail=False, is_neck=False,
+                      frame=0, seg_index=0, direction=None, snake_length=3):
+    """Draw a body segment. Neck gets arms, tail gets legs that grow."""
     cx = sx * CELL_SIZE + CELL_SIZE // 2
     cy = sy * CELL_SIZE + CELL_SIZE // 2
 
-    # Long smooth body — rounded rectangle filling the cell
+    # Long smooth body
     body_rect = pygame.Rect(sx * CELL_SIZE + 2, sy * CELL_SIZE + 2,
                             CELL_SIZE - 4, CELL_SIZE - 4)
     pygame.draw.rect(screen, SKIN_COLOR, body_rect, border_radius=8)
@@ -134,27 +135,68 @@ def draw_body_segment(screen, sx, sy, is_tail=False, frame=0, seg_index=0,
     pygame.draw.rect(screen, SKIN_LIGHT, inner, border_radius=6)
     pygame.draw.rect(screen, SKIN_DARK, body_rect, 1, border_radius=8)
 
-    # Only draw legs on the tail segment
-    if is_tail and direction is not None:
-        dx, dy = DIR_VECTORS[direction]
-        perp_x, perp_y = -dy, dx
+    if direction is None:
+        return
 
+    dx, dy = DIR_VECTORS[direction]
+    perp_x, perp_y = -dy, dx
+
+    # Arms on the neck segment (first body segment behind head)
+    if is_neck:
         phase = frame % 2
-        leg_len = 9
-        foot_r = 3
+        arm_len = 10
+
+        for side in (-1, 1):
+            # Arm base at the side of the body
+            base_x = cx + perp_x * (CELL_SIZE // 2 - 2) * side
+            base_y = cy + perp_y * (CELL_SIZE // 2 - 2) * side
+
+            # Arms swing forward/back while running
+            swing = arm_len if (phase == 0) == (side == 1) else -arm_len
+            elbow_x = base_x + perp_x * 6 * side + dx * (swing * 0.5)
+            elbow_y = base_y + perp_y * 6 * side + dy * (swing * 0.5)
+            hand_x = elbow_x + dx * swing * 0.5 + perp_x * 2 * side
+            hand_y = elbow_y + dy * swing * 0.5 + perp_y * 2 * side
+
+            # Upper arm
+            pygame.draw.line(screen, LEG_COLOR,
+                             (int(base_x), int(base_y)),
+                             (int(elbow_x), int(elbow_y)), 2)
+            # Forearm
+            pygame.draw.line(screen, LEG_COLOR,
+                             (int(elbow_x), int(elbow_y)),
+                             (int(hand_x), int(hand_y)), 2)
+            # Hand
+            pygame.draw.circle(screen, HAND_COLOR, (int(hand_x), int(hand_y)), 3)
+
+    # Legs on the tail — length grows with snake size
+    if is_tail:
+        phase = frame % 2
+        # Legs grow: start at 6, add 0.5 per body segment, cap at 20
+        leg_len = min(6 + snake_length * 0.5, 20)
+        leg_thickness = min(2 + snake_length // 10, 4)
+        foot_r = min(3 + snake_length // 15, 5)
 
         for side in (-1, 1):
             base_x = cx + perp_x * (CELL_SIZE // 2 - 3) * side
             base_y = cy + perp_y * (CELL_SIZE // 2 - 3) * side
 
-            # Alternate legs forward/back
-            offset = leg_len if (phase == 0) == (side == 1) else -leg_len
-            tip_x = base_x + perp_x * 5 * side + dx * offset
-            tip_y = base_y + perp_y * 5 * side + dy * offset
+            # Knee bend — legs have two segments
+            swing = leg_len if (phase == 0) == (side == 1) else -leg_len
+            knee_x = base_x + perp_x * (leg_len * 0.4) * side + dx * (swing * 0.3)
+            knee_y = base_y + perp_y * (leg_len * 0.4) * side + dy * (swing * 0.3)
+            tip_x = knee_x + perp_x * (leg_len * 0.3) * side + dx * (swing * 0.7)
+            tip_y = knee_y + perp_y * (leg_len * 0.3) * side + dy * (swing * 0.7)
 
+            # Thigh
             pygame.draw.line(screen, LEG_COLOR,
                              (int(base_x), int(base_y)),
-                             (int(tip_x), int(tip_y)), 3)
+                             (int(knee_x), int(knee_y)), leg_thickness)
+            # Shin
+            pygame.draw.line(screen, LEG_COLOR,
+                             (int(knee_x), int(knee_y)),
+                             (int(tip_x), int(tip_y)), leg_thickness)
+            # Shoe
             pygame.draw.circle(screen, SHOE_COLOR, (int(tip_x), int(tip_y)), foot_r)
             pygame.draw.circle(screen, SHOE_DARK, (int(tip_x), int(tip_y)), foot_r, 1)
 
@@ -253,13 +295,17 @@ def main():
             # Food
             draw_apple(screen, env.food[0], env.food[1])
 
-            # Body (with legs, frozen pose)
+            # Body (frozen pose)
             snake_list = list(env.snake)
+            slen = len(snake_list)
             for i, (sx, sy) in enumerate(snake_list):
                 if i == 0:
                     continue
-                draw_body_segment(screen, sx, sy, is_tail=(i == len(snake_list) - 1),
-                                  frame=0, seg_index=i, direction=last_direction)
+                draw_body_segment(screen, sx, sy,
+                                  is_tail=(i == slen - 1),
+                                  is_neck=(i == 1),
+                                  frame=0, seg_index=i,
+                                  direction=last_direction, snake_length=slen)
 
             # Dead head — bounced back with death sprite
             hx, hy = env.snake[0]
@@ -327,13 +373,17 @@ def main():
         if not eating:
             draw_apple(screen, env.food[0], env.food[1])
 
-        # Body segments with running legs
+        # Body segments with arms and legs
         snake_list = list(env.snake)
+        slen = len(snake_list)
         for i, (sx, sy) in enumerate(snake_list):
             if i == 0:
                 continue
-            draw_body_segment(screen, sx, sy, is_tail=(i == len(snake_list) - 1),
-                              frame=frame_count, seg_index=i, direction=env.direction)
+            draw_body_segment(screen, sx, sy,
+                              is_tail=(i == slen - 1),
+                              is_neck=(i == 1),
+                              frame=frame_count, seg_index=i,
+                              direction=env.direction, snake_length=slen)
 
         # Motion lines behind the tail
         if len(snake_list) > 1:
