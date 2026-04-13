@@ -1,6 +1,6 @@
 # DeepSnake - Snake DQN Reinforcement Learning
 
-A Snake game agent trained with Deep Q-Learning (DQN) using PyTorch. The agent learns from scratch to play Snake, averaging 44+ points over 200 evaluation games. Hyperparameters and architecture were tuned via automated experiment sweeps (autoresearch).
+A Snake game agent trained with Deep Q-Learning (DQN) using PyTorch. The agent learns from scratch to play Snake, averaging ~53 points over 200 evaluation games. Hyperparameters were tuned via automated experiment sweeps (autoresearch), then further improved with a hybrid scalar-MLP / local-CNN architecture and extended training (5000 episodes).
 
 ## Results
 
@@ -25,14 +25,16 @@ A Snake game agent trained with Deep Q-Learning (DQN) using PyTorch. The agent l
 ```
 snake_dqn/
 ├── snake_env.py      # Headless Snake game environment (READ-ONLY)
-├── model.py          # DQN neural network (512-256-128)
+├── model.py          # Hybrid DQN: scalar MLP + local-grid CNN
 ├── agent.py          # Double DQN agent with replay buffer
-├── train.py          # Training loop (1000 episodes)
+├── train.py          # Training loop (5000 episodes)
 ├── evaluate.py       # Headless evaluation over 200 games
 ├── play.py           # Pygame visualization of trained agent
 ├── plot_training.py  # Plot training curves
+├── training_log.csv  # Per-episode training log
+├── training_plot.png # Training curves plot
 └── checkpoints/      # Saved model weights
-results.tsv           # Full autoresearch experiment log (47 experiments)
+results.tsv           # Full autoresearch experiment log (48 experiments)
 ```
 
 ## Quick Start
@@ -54,6 +56,8 @@ python play.py
 - `SPACE` - pause/unpause
 - `R` - reset game
 - `Q` - quit
+
+The visualization features custom sprite-based graphics: the snake has a dark-green rounded head with directional eyes and a forked red tongue that flicks out when food is within 3 cells, and a green rounded-segment body. The apple has a 3D-shaded look with stem, leaf, and highlight. Eating triggers a happy-squint-eyes + open-mouth animation (with a red crumb), and dying plays a bounce-back death effect with X-eyes, dizzy stars, and a flashing "BONK!" label.
 
 ### Train from scratch
 
@@ -79,7 +83,7 @@ python plot_training.py
 - Actions are relative: straight, turn right, turn left
 - Reward: +10 eat food, -10 die, +1/-1 move closer/farther from food
 
-### State Representation (24 scalar features + 7×7 local grid)
+### State Representation (24 scalar features + 9×9 local grid)
 
 **Scalar features (24 values):**
 - Immediate danger in 3 directions (straight, right, left)
@@ -107,7 +111,8 @@ The grid lets the CNN see the local body topology that scalar features can't enc
 | Soft target updates (tau=0.005) | Smoother learning than hard copies |
 | Gradient clipping (max_norm=1.0) | Prevents gradient explosion |
 | Linear epsilon decay (over 70% of episodes) | Better exploration schedule than multiplicative decay |
-| Larger batch size (128) | More stable gradient estimates |
+| Larger batch size (64) | More stable gradient estimates |
+| Train every 4 steps | Reduces compute; decorrelates updates |
 
 ### Network Architecture (Hybrid)
 
@@ -123,29 +128,29 @@ The model has two parallel input paths that merge before the output layer:
                       128-dim ─────────────────┐
                                                 │
   ┌─────────────────────┐                      │
-  │  3 × 7 × 7 grid     │                      │
+  │  3 × 9 × 9 grid     │                      │
   │  (local view)       │                      │
   └──────────┬──────────┘                      │
              │                                  │
      Conv2d(3→16, 3×3) → ReLU                 │
      Conv2d(16→16, 3×3) → ReLU                │
-     Flatten (144)                             │
+     Flatten (400)                             │
              │                                  │
-      144-dim ─────────────────────────────────┤
+      400-dim ─────────────────────────────────┤
                                                 │
-                                    Concat (272)
+                                    Concat (528)
                                         │
-                                Linear(272 → 128) → ReLU
+                                Linear(528 → 128) → ReLU
                                 Linear(128 → 3)
                                         │
                                 Q-values (3 actions)
 ```
 
-**41K parameters total.** The scalar path bootstraps food-finding (proven from baseline); the CNN path adds local body-topology awareness for trap avoidance.
+**~74K parameters total.** The scalar path bootstraps food-finding (proven from baseline); the CNN path adds local body-topology awareness for trap avoidance.
 
 ### Autoresearch Results
 
-47 experiments were run automatically using the [Karpathy autoresearch](https://github.com/karpathy/autoresearch) pattern: modify code, train, evaluate over 200 greedy games, keep improvements, discard failures, repeat. Each experiment was committed, evaluated, and either kept or reverted.
+48 experiments were run automatically using the [Karpathy autoresearch](https://github.com/karpathy/autoresearch) pattern: modify code, train, evaluate over 200 greedy games, keep improvements, discard failures, repeat. Each experiment was committed, evaluated, and either kept or reverted.
 
 **Improvements kept (cumulative):**
 
@@ -160,7 +165,9 @@ The model has two parallel input paths that merge before the output layer:
 
 **Total improvement: +11.18 avg_score (+34%)**
 
-Notable failed experiments include: dueling DQN, prioritized experience replay, n-step returns, reward clipping/scaling, cosine LR annealing, LayerNorm, dropout, GELU/SiLU activations, and various learning rate reductions. See `results.tsv` for the full log of all 47 experiments.
+After the autoresearch sweep, two manual changes pushed the score further: replacing the flat MLP with the hybrid scalar-MLP + local-CNN architecture (v5), and expanding the local grid from 7×7 to 9×9 with 5000 training episodes (v6), reaching the current avg ~53.
+
+Notable failed experiments include: dueling DQN, prioritized experience replay, n-step returns, reward clipping/scaling, cosine LR annealing, LayerNorm, dropout, GELU/SiLU activations, and various learning rate reductions. See `results.tsv` for the full log of all 48 experiments.
 
 ### Evaluate a trained model
 

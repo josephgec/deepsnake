@@ -1,6 +1,5 @@
 import sys
 import math
-import os
 
 import numpy as np
 import pygame
@@ -11,12 +10,15 @@ from agent import DQNAgent
 
 # Colors
 BLACK = (0, 0, 0)
+GREEN = (0, 200, 0)
+DARK_GREEN = (0, 130, 0)
+LIGHT_GREEN = (100, 230, 100)
 WHITE = (255, 255, 255)
 GRAY = (60, 60, 60)
+EYE_WHITE = (240, 240, 240)
+EYE_BLACK = (20, 20, 20)
+TONGUE = (220, 50, 80)
 YELLOW = (255, 220, 50)
-BODY_COLOR = (70, 130, 220)
-BODY_LIGHT = (110, 165, 240)
-BODY_DARK = (50, 100, 180)
 
 # Apple colors
 APPLE_RED = (220, 30, 30)
@@ -30,61 +32,6 @@ GRID_SIZE = 20
 WINDOW_SIZE = CELL_SIZE * GRID_SIZE
 FPS = 10
 
-# Direction to rotation angle (image faces UP by default after crop)
-# RIGHT=0, DOWN=1, LEFT=2, UP=3
-DIR_TO_ANGLE = {
-    Direction.RIGHT: 270,
-    Direction.DOWN: 180,
-    Direction.LEFT: 90,
-    Direction.UP: 0,
-}
-
-
-def load_face_sprites(path, size):
-    """Load the face photo, crop tight to face, circle-mask, create rotated versions."""
-    raw = pygame.image.load(path)
-
-    # Zoom in on the face — crop to center 55% of image height, centered
-    w, h = raw.get_size()
-    face_h = int(h * 0.55)
-    face_w = face_h  # square
-    crop_x = (w - face_w) // 2
-    crop_y = int(h * 0.15)  # face starts ~15% from top
-    square = pygame.Surface((face_w, face_h), pygame.SRCALPHA)
-    square.blit(raw, (0, 0), (crop_x, crop_y, face_w, face_h))
-
-    # Scale to cell size
-    scaled = pygame.transform.smoothscale(square, (size, size))
-
-    # Circular mask
-    circle_surf = pygame.Surface((size, size), pygame.SRCALPHA)
-    pygame.draw.circle(circle_surf, (255, 255, 255, 255), (size // 2, size // 2), size // 2)
-
-    masked = pygame.Surface((size, size), pygame.SRCALPHA)
-    for x in range(size):
-        for y in range(size):
-            if circle_surf.get_at((x, y)).a > 0:
-                masked.set_at((x, y), scaled.get_at((x, y)))
-
-    # Create rotated sprites for each direction
-    sprites = {}
-    for direction, angle in DIR_TO_ANGLE.items():
-        rotated = pygame.transform.rotate(masked, angle)
-        # Rotation may change size slightly — re-center
-        rot_rect = rotated.get_rect(center=(size // 2, size // 2))
-        final = pygame.Surface((size, size), pygame.SRCALPHA)
-        final.blit(rotated, rot_rect)
-        sprites[direction] = final
-
-    # Death sprite — tinted red, no rotation needed (use last direction)
-    death_sprite = masked.copy()
-    red_overlay = pygame.Surface((size, size), pygame.SRCALPHA)
-    red_overlay.fill((255, 0, 0, 80))
-    death_sprite.blit(red_overlay, (0, 0))
-    sprites["death"] = death_sprite
-
-    return sprites
-
 
 def draw_apple(screen, fx, fy):
     """Draw a nice apple with stem, leaf, and shine."""
@@ -92,17 +39,22 @@ def draw_apple(screen, fx, fy):
     cy = fy * CELL_SIZE + CELL_SIZE // 2
     r = CELL_SIZE // 2 - 2
 
+    # Main apple body
     pygame.draw.circle(screen, APPLE_RED, (cx, cy + 1), r)
+    # Darker bottom edge
     pygame.draw.arc(screen, APPLE_DARK,
                     (cx - r, cy + 1 - r, r * 2, r * 2),
                     math.pi + 0.3, 2 * math.pi - 0.3, 2)
+    # Shine highlight
     pygame.draw.circle(screen, APPLE_SHINE, (cx - 4, cy - 4), 4)
     pygame.draw.circle(screen, (255, 180, 180), (cx - 2, cy - 6), 2)
 
+    # Stem
     stem_base = (cx, cy - r + 2)
     stem_top = (cx + 1, cy - r - 4)
     pygame.draw.line(screen, APPLE_STEM, stem_base, stem_top, 2)
 
+    # Leaf
     leaf_pts = [
         (cx + 1, cy - r - 2),
         (cx + 7, cy - r - 6),
@@ -111,118 +63,111 @@ def draw_apple(screen, fx, fy):
     pygame.draw.polygon(screen, APPLE_LEAF, leaf_pts)
 
 
-SKIN_COLOR = (210, 170, 130)
-SKIN_LIGHT = (230, 195, 160)
-SKIN_DARK = (180, 140, 100)
-SHOE_COLOR = (200, 60, 60)
-SHOE_DARK = (150, 40, 40)
-LEG_COLOR = (180, 145, 110)
-HAND_COLOR = (220, 180, 140)
+def draw_death_face(screen, hx, hy, dx, dy):
+    """Draw X eyes and dizzy stars on the dead snake head."""
+    cx = hx * CELL_SIZE + CELL_SIZE // 2
+    cy = hy * CELL_SIZE + CELL_SIZE // 2
 
+    # Head (slightly reddened)
+    head_rect = pygame.Rect(hx * CELL_SIZE + 1, hy * CELL_SIZE + 1,
+                            CELL_SIZE - 2, CELL_SIZE - 2)
+    pygame.draw.rect(screen, (100, 100, 0), head_rect, border_radius=8)
 
-def draw_body_segment(screen, sx, sy, is_tail=False, is_neck=False,
-                      frame=0, seg_index=0, direction=None, snake_length=3):
-    """Draw a body segment. Neck gets arms, tail gets legs that grow."""
-    cx = sx * CELL_SIZE + CELL_SIZE // 2
-    cy = sy * CELL_SIZE + CELL_SIZE // 2
-
-    # Long smooth body
-    body_rect = pygame.Rect(sx * CELL_SIZE + 2, sy * CELL_SIZE + 2,
-                            CELL_SIZE - 4, CELL_SIZE - 4)
-    pygame.draw.rect(screen, SKIN_COLOR, body_rect, border_radius=8)
-    inner = pygame.Rect(sx * CELL_SIZE + 4, sy * CELL_SIZE + 4,
-                        CELL_SIZE - 8, CELL_SIZE - 8)
-    pygame.draw.rect(screen, SKIN_LIGHT, inner, border_radius=6)
-    pygame.draw.rect(screen, SKIN_DARK, body_rect, 1, border_radius=8)
-
-    if direction is None:
-        return
-
-    dx, dy = DIR_VECTORS[direction]
+    # X eyes
     perp_x, perp_y = -dy, dx
+    eye_offset = 6
+    eye_fwd = 4
+    x_size = 4
 
-    # Arms on the neck segment (first body segment behind head)
-    if is_neck:
-        phase = frame % 2
-        arm_len = 10
+    for side in (-1, 1):
+        ex = int(cx + dx * eye_fwd + perp_x * eye_offset * side)
+        ey = int(cy + dy * eye_fwd + perp_y * eye_offset * side)
+        # Draw X
+        pygame.draw.line(screen, EYE_BLACK,
+                         (ex - x_size, ey - x_size), (ex + x_size, ey + x_size), 2)
+        pygame.draw.line(screen, EYE_BLACK,
+                         (ex - x_size, ey + x_size), (ex + x_size, ey - x_size), 2)
 
-        for side in (-1, 1):
-            # Arm base at the side of the body
-            base_x = cx + perp_x * (CELL_SIZE // 2 - 2) * side
-            base_y = cy + perp_y * (CELL_SIZE // 2 - 2) * side
+    # Dizzy stars around head
+    star_positions = [
+        (cx - 14, cy - 14),
+        (cx + 12, cy - 12),
+        (cx - 10, cy + 13),
+    ]
+    for sx, sy in star_positions:
+        star_size = 3
+        pygame.draw.line(screen, YELLOW, (sx - star_size, sy), (sx + star_size, sy), 1)
+        pygame.draw.line(screen, YELLOW, (sx, sy - star_size), (sx, sy + star_size), 1)
+        pygame.draw.line(screen, YELLOW,
+                         (sx - 2, sy - 2), (sx + 2, sy + 2), 1)
+        pygame.draw.line(screen, YELLOW,
+                         (sx - 2, sy + 2), (sx + 2, sy - 2), 1)
 
-            # Arms swing forward/back while running
-            swing = arm_len if (phase == 0) == (side == 1) else -arm_len
-            elbow_x = base_x + perp_x * 6 * side + dx * (swing * 0.5)
-            elbow_y = base_y + perp_y * 6 * side + dy * (swing * 0.5)
-            hand_x = elbow_x + dx * swing * 0.5 + perp_x * 2 * side
-            hand_y = elbow_y + dy * swing * 0.5 + perp_y * 2 * side
-
-            # Upper arm
-            pygame.draw.line(screen, LEG_COLOR,
-                             (int(base_x), int(base_y)),
-                             (int(elbow_x), int(elbow_y)), 2)
-            # Forearm
-            pygame.draw.line(screen, LEG_COLOR,
-                             (int(elbow_x), int(elbow_y)),
-                             (int(hand_x), int(hand_y)), 2)
-            # Hand
-            pygame.draw.circle(screen, HAND_COLOR, (int(hand_x), int(hand_y)), 3)
-
-    # Legs on the tail — length grows with snake size
-    if is_tail:
-        phase = frame % 2
-        # Legs grow: start at 6, add 0.5 per body segment, cap at 20
-        leg_len = min(6 + snake_length * 0.5, 20)
-        leg_thickness = min(2 + snake_length // 10, 4)
-        foot_r = min(3 + snake_length // 15, 5)
-
-        for side in (-1, 1):
-            base_x = cx + perp_x * (CELL_SIZE // 2 - 3) * side
-            base_y = cy + perp_y * (CELL_SIZE // 2 - 3) * side
-
-            # Knee bend — legs have two segments
-            swing = leg_len if (phase == 0) == (side == 1) else -leg_len
-            knee_x = base_x + perp_x * (leg_len * 0.4) * side + dx * (swing * 0.3)
-            knee_y = base_y + perp_y * (leg_len * 0.4) * side + dy * (swing * 0.3)
-            tip_x = knee_x + perp_x * (leg_len * 0.3) * side + dx * (swing * 0.7)
-            tip_y = knee_y + perp_y * (leg_len * 0.3) * side + dy * (swing * 0.7)
-
-            # Thigh
-            pygame.draw.line(screen, LEG_COLOR,
-                             (int(base_x), int(base_y)),
-                             (int(knee_x), int(knee_y)), leg_thickness)
-            # Shin
-            pygame.draw.line(screen, LEG_COLOR,
-                             (int(knee_x), int(knee_y)),
-                             (int(tip_x), int(tip_y)), leg_thickness)
-            # Shoe
-            pygame.draw.circle(screen, SHOE_COLOR, (int(tip_x), int(tip_y)), foot_r)
-            pygame.draw.circle(screen, SHOE_DARK, (int(tip_x), int(tip_y)), foot_r, 1)
+    # Open mouth (shocked)
+    mouth_x = int(cx + dx * 2)
+    mouth_y = int(cy + dy * 2 + 3)
+    pygame.draw.circle(screen, (50, 50, 0), (mouth_x, mouth_y), 3)
 
 
-def draw_motion_lines(screen, tx, ty, direction, frame):
-    """Draw speed lines behind the tail."""
+def draw_alive_head(screen, hx, hy, direction, show_tongue=False, eating=False):
+    """Draw the snake head. Tongue only when near food, open mouth when eating."""
+    cx = hx * CELL_SIZE + CELL_SIZE // 2
+    cy = hy * CELL_SIZE + CELL_SIZE // 2
     dx, dy = DIR_VECTORS[direction]
-    cx = tx * CELL_SIZE + CELL_SIZE // 2
-    cy = ty * CELL_SIZE + CELL_SIZE // 2
 
-    # Lines trail behind (opposite of direction)
-    for i in range(3):
-        offset = 8 + i * 6 + (frame % 2) * 3
-        length = 6 - i * 2
-        lx = cx - dx * offset
-        ly = cy - dy * offset
-        # Perpendicular spread
-        perp_x, perp_y = -dy, dx
-        spread = (i - 1) * 5
-        sx_pos = int(lx + perp_x * spread)
-        sy_pos = int(ly + perp_y * spread)
-        ex = int(sx_pos - dx * length)
-        ey = int(sy_pos - dy * length)
-        alpha = 180 - i * 50
-        pygame.draw.line(screen, (alpha, alpha, alpha),
-                         (sx_pos, sy_pos), (ex, ey), 1)
+    # Head
+    head_rect = pygame.Rect(hx * CELL_SIZE + 1, hy * CELL_SIZE + 1,
+                            CELL_SIZE - 2, CELL_SIZE - 2)
+    pygame.draw.rect(screen, DARK_GREEN, head_rect, border_radius=8)
+
+    # Perpendicular for eye placement
+    perp_x, perp_y = -dy, dx
+    eye_offset = 6
+    eye_fwd = 4
+    eye_r = 4
+    pupil_r = 2
+
+    if eating:
+        # Happy squint eyes when eating
+        for side in (-1, 1):
+            ex = int(cx + dx * eye_fwd + perp_x * eye_offset * side)
+            ey = int(cy + dy * eye_fwd + perp_y * eye_offset * side)
+            # Upward arc (happy eyes)
+            pygame.draw.arc(screen, EYE_BLACK,
+                            (ex - 4, ey - 3, 8, 6),
+                            0.3, math.pi - 0.3, 2)
+        # Open mouth eating the apple
+        mouth_x = int(cx + dx * 8)
+        mouth_y = int(cy + dy * 8)
+        pygame.draw.circle(screen, (40, 100, 40), (mouth_x, mouth_y), 5)
+        # Small red crumb to suggest apple being eaten
+        pygame.draw.circle(screen, APPLE_RED, (mouth_x + int(dx * 2), mouth_y + int(dy * 2)), 2)
+    else:
+        # Normal eyes
+        for side in (-1, 1):
+            ex = cx + dx * eye_fwd + perp_x * eye_offset * side
+            ey = cy + dy * eye_fwd + perp_y * eye_offset * side
+            pygame.draw.circle(screen, EYE_WHITE, (int(ex), int(ey)), eye_r)
+            pygame.draw.circle(screen, EYE_BLACK, (int(ex + dx * 1), int(ey + dy * 1)), pupil_r)
+
+    # Tongue — only when near food (and not eating)
+    if show_tongue and not eating:
+        tongue_base_x = cx + dx * (CELL_SIZE // 2)
+        tongue_base_y = cy + dy * (CELL_SIZE // 2)
+        tongue_tip_x = tongue_base_x + dx * 8
+        tongue_tip_y = tongue_base_y + dy * 8
+        pygame.draw.line(screen, TONGUE,
+                         (int(tongue_base_x), int(tongue_base_y)),
+                         (int(tongue_tip_x), int(tongue_tip_y)), 2)
+        fork = 3
+        pygame.draw.line(screen, TONGUE,
+                         (int(tongue_tip_x), int(tongue_tip_y)),
+                         (int(tongue_tip_x + dx * 3 + perp_x * fork),
+                          int(tongue_tip_y + dy * 3 + perp_y * fork)), 2)
+        pygame.draw.line(screen, TONGUE,
+                         (int(tongue_tip_x), int(tongue_tip_y)),
+                         (int(tongue_tip_x + dx * 3 - perp_x * fork),
+                          int(tongue_tip_y + dy * 3 - perp_y * fork)), 2)
 
 
 def main():
@@ -239,20 +184,14 @@ def main():
     font = pygame.font.SysFont("monospace", 24, bold=True)
     death_font = pygame.font.SysFont("monospace", 18, bold=True)
 
-    # Load face sprites
-    face_path = os.path.join(os.path.dirname(__file__), "face.jpg")
-    face_sprites = load_face_sprites(face_path, CELL_SIZE)
-
     high_score = 0
     paused = False
     state = env.reset()
     done = False
     death_timer = 0
     death_direction = (1, 0)
-    last_direction = Direction.RIGHT
     prev_score = 0
     eat_timer = 0
-    frame_count = 0
 
     while True:
         for event in pygame.event.get():
@@ -276,15 +215,14 @@ def main():
 
         if done:
             death_timer += 1
-            if death_timer > FPS * 2:
+            if death_timer > FPS * 2:  # 2 seconds of death animation
                 state = env.reset()
                 done = False
                 death_timer = 0
-                prev_score = 0
                 clock.tick(FPS)
                 continue
 
-            # --- Death frame ---
+            # Draw the death frame
             screen.fill(BLACK)
 
             # Grid
@@ -293,47 +231,74 @@ def main():
                 pygame.draw.line(screen, GRAY, (0, i * CELL_SIZE), (WINDOW_SIZE, i * CELL_SIZE))
 
             # Food
-            draw_apple(screen, env.food[0], env.food[1])
+            fx, fy = env.food
+            draw_apple(screen, fx, fy)
 
-            # Body (frozen pose)
-            snake_list = list(env.snake)
-            slen = len(snake_list)
-            for i, (sx, sy) in enumerate(snake_list):
+            # Body (faded)
+            for i, (sx, sy) in enumerate(env.snake):
                 if i == 0:
                     continue
-                draw_body_segment(screen, sx, sy,
-                                  is_tail=(i == slen - 1),
-                                  is_neck=(i == 1),
-                                  frame=0, seg_index=i,
-                                  direction=last_direction, snake_length=slen)
+                body_rect = pygame.Rect(sx * CELL_SIZE + 1, sy * CELL_SIZE + 1,
+                                        CELL_SIZE - 2, CELL_SIZE - 2)
+                pygame.draw.rect(screen, (0, 140, 0), body_rect, border_radius=6)
+                inner = pygame.Rect(sx * CELL_SIZE + 3, sy * CELL_SIZE + 3,
+                                    CELL_SIZE - 6, CELL_SIZE - 6)
+                pygame.draw.rect(screen, (70, 170, 70), inner, border_radius=4)
 
-            # Dead head — bounced back with death sprite
+            # Dead head — bounced back
             hx, hy = env.snake[0]
             ddx, ddy = death_direction
-            bounce = max(0, 4 - death_timer)
-            px = hx * CELL_SIZE + int(-ddx * bounce)
-            py = hy * CELL_SIZE + int(-ddy * bounce)
+            bounce = max(0, 4 - death_timer)  # bounce back a few pixels
+            offset_x = -ddx * bounce
+            offset_y = -ddy * bounce
+            # Shift head by offset for bounce effect
+            orig_hx_px = hx * CELL_SIZE
+            orig_hy_px = hy * CELL_SIZE
+            screen_hx = orig_hx_px + offset_x
+            screen_hy = orig_hy_px + offset_y
+            head_rect = pygame.Rect(screen_hx + 1, screen_hy + 1,
+                                    CELL_SIZE - 2, CELL_SIZE - 2)
+            pygame.draw.rect(screen, (100, 100, 0), head_rect, border_radius=8)
 
-            # Draw the death-tinted face
-            death_face = face_sprites.get("death", face_sprites[last_direction])
-            screen.blit(death_face, (px, py))
+            # Death face at offset position
+            # Use pixel-level drawing for the offset head
+            face_cx = screen_hx + CELL_SIZE // 2
+            face_cy = screen_hy + CELL_SIZE // 2
+            perp_x, perp_y = -ddy, ddx
+            eye_offset = 6
+            eye_fwd = 4
+            x_size = 4
+            for side in (-1, 1):
+                ex = int(face_cx + ddx * eye_fwd + perp_x * eye_offset * side)
+                ey = int(face_cy + ddy * eye_fwd + perp_y * eye_offset * side)
+                pygame.draw.line(screen, EYE_BLACK,
+                                 (ex - x_size, ey - x_size), (ex + x_size, ey + x_size), 2)
+                pygame.draw.line(screen, EYE_BLACK,
+                                 (ex - x_size, ey + x_size), (ex + x_size, ey - x_size), 2)
 
-            # Dizzy stars
-            face_cx = px + CELL_SIZE // 2
-            face_cy = py + CELL_SIZE // 2
-            if death_timer % 3 != 0:
-                for (ox, oy) in [(-14, -16), (12, -14), (-10, 15)]:
-                    stx, sty = int(face_cx + ox), int(face_cy + oy)
+            # Stars
+            if death_timer % 3 != 0:  # flicker
+                star_positions = [
+                    (int(face_cx - 14), int(face_cy - 14)),
+                    (int(face_cx + 12), int(face_cy - 12)),
+                    (int(face_cx - 10), int(face_cy + 13)),
+                ]
+                for stx, sty in star_positions:
                     s = 3
                     pygame.draw.line(screen, YELLOW, (stx - s, sty), (stx + s, sty), 1)
                     pygame.draw.line(screen, YELLOW, (stx, sty - s), (stx, sty + s), 1)
                     pygame.draw.line(screen, YELLOW, (stx - 2, sty - 2), (stx + 2, sty + 2), 1)
                     pygame.draw.line(screen, YELLOW, (stx - 2, sty + 2), (stx + 2, sty - 2), 1)
 
-            # Score + BONK
+            # Shocked mouth
+            mouth_x = int(face_cx + ddx * 2)
+            mouth_y = int(face_cy + ddy * 2 + 3)
+            pygame.draw.circle(screen, (50, 50, 0), (mouth_x, mouth_y), 3)
+
+            # Score + death text
             score_text = font.render(f"Score: {score}  Best: {high_score}", True, WHITE)
             screen.blit(score_text, (10, 5))
-            if death_timer % 6 < 3:
+            if death_timer % 6 < 3:  # blink
                 death_text = death_font.render("BONK!", True, YELLOW)
                 screen.blit(death_text, (hx * CELL_SIZE - 10, hy * CELL_SIZE - 22))
 
@@ -341,16 +306,15 @@ def main():
             clock.tick(FPS)
             continue
 
-        # --- Alive frame ---
         action = agent.get_action(state)
         prev_direction = env.direction
         state, _, done, info = env.step(action)
         score = info["score"]
         high_score = max(high_score, score)
 
-        # Eating detection
+        # Detect eating
         if score > prev_score:
-            eat_timer = 3
+            eat_timer = 3  # show eating face for 3 frames
         prev_score = score
         eating = eat_timer > 0
         if eat_timer > 0:
@@ -358,8 +322,13 @@ def main():
 
         if done:
             death_direction = DIR_VECTORS[prev_direction]
-            last_direction = prev_direction
             death_timer = 0
+
+        # Check if tongue should show (food within 3 Manhattan distance)
+        hx, hy = env.snake[0]
+        fx, fy = env.food
+        food_dist = abs(hx - fx) + abs(hy - fy)
+        show_tongue = food_dist <= 3
 
         # Draw
         screen.fill(BLACK)
@@ -369,41 +338,24 @@ def main():
             pygame.draw.line(screen, GRAY, (i * CELL_SIZE, 0), (i * CELL_SIZE, WINDOW_SIZE))
             pygame.draw.line(screen, GRAY, (0, i * CELL_SIZE), (WINDOW_SIZE, i * CELL_SIZE))
 
-        # Food (hide briefly when eating)
+        # Food (don't draw during eating animation — it looks like it was eaten)
         if not eating:
-            draw_apple(screen, env.food[0], env.food[1])
+            draw_apple(screen, fx, fy)
 
-        # Body segments with arms and legs
-        snake_list = list(env.snake)
-        slen = len(snake_list)
-        for i, (sx, sy) in enumerate(snake_list):
+        # Snake body
+        for i, (sx, sy) in enumerate(env.snake):
             if i == 0:
                 continue
-            draw_body_segment(screen, sx, sy,
-                              is_tail=(i == slen - 1),
-                              is_neck=(i == 1),
-                              frame=frame_count, seg_index=i,
-                              direction=env.direction, snake_length=slen)
+            body_rect = pygame.Rect(sx * CELL_SIZE + 1, sy * CELL_SIZE + 1,
+                                    CELL_SIZE - 2, CELL_SIZE - 2)
+            pygame.draw.rect(screen, GREEN, body_rect, border_radius=6)
+            inner = pygame.Rect(sx * CELL_SIZE + 3, sy * CELL_SIZE + 3,
+                                CELL_SIZE - 6, CELL_SIZE - 6)
+            pygame.draw.rect(screen, LIGHT_GREEN, inner, border_radius=4)
 
-        # Motion lines behind the tail
-        if len(snake_list) > 1:
-            tail_x, tail_y = snake_list[-1]
-            draw_motion_lines(screen, tail_x, tail_y, env.direction, frame_count)
-
-        # Head — the face photo
-        hx, hy = env.snake[0]
-        head_sprite = face_sprites[env.direction]
-        screen.blit(head_sprite, (hx * CELL_SIZE, hy * CELL_SIZE))
-
-        frame_count += 1
-
-        # Eating effect — small apple crumbs near mouth
-        if eating:
-            dx, dy = DIR_VECTORS[env.direction]
-            crumb_x = hx * CELL_SIZE + CELL_SIZE // 2 + int(dx * 12)
-            crumb_y = hy * CELL_SIZE + CELL_SIZE // 2 + int(dy * 12)
-            pygame.draw.circle(screen, APPLE_RED, (crumb_x, crumb_y), 3)
-            pygame.draw.circle(screen, APPLE_RED, (crumb_x + 4, crumb_y - 3), 2)
+        # Snake head
+        draw_alive_head(screen, hx, hy, env.direction,
+                        show_tongue=show_tongue, eating=eating)
 
         # Score
         score_text = font.render(f"Score: {score}  Best: {high_score}", True, WHITE)
