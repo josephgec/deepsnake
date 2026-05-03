@@ -1,5 +1,7 @@
 # DeepSnake - Snake DQN Reinforcement Learning
 
+> **Writeup:** [Teaching a snake to play with DQN](https://jthomas.site/blog/deepsnake.html)
+
 A Snake game agent trained with Deep Q-Learning (DQN) using PyTorch. The agent learns from scratch to play Snake, averaging ~53 points over 200 evaluation games. Hyperparameters were tuned via automated experiment sweeps (autoresearch), then further improved with a hybrid scalar-MLP / local-CNN architecture and extended training (5000 episodes).
 
 ## Results
